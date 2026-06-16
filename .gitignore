@@ -1,4 +1,5 @@
 /target
 /.venv
 target_curve.csv
+generation_iteration.csv
 run.cmd
