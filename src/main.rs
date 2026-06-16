@@ -3,8 +3,20 @@ use std::fs::OpenOptions;
 use std::io::Result;
 use std::io::Write;
 
-fn target_curve(x: f64) -> f64 {
-    8.0 * (25.0 * (x / 4.0).sin() + 45.0 * (x / 10.0).cos()) + 17.0 * x - 35.0
+fn cal_target_y(x: f64) -> f64 {
+    cal_y(x, &vec![8, 25, 4, 45, 10, 17, 35])
+}
+
+fn cal_y(x: f64, variables: &Vec<u8>) -> f64 {
+    let a = variables[0] as f64;
+    let b = variables[1] as f64;
+    let c = variables[2] as f64;
+    let d = variables[3] as f64;
+    let e = variables[4] as f64;
+    let f = variables[5] as f64;
+    let g = variables[6] as f64;
+
+    a * (b * (x / c).sin() + d * (x / e).cos()) + f * x - g
 }
 
 #[derive(Clone, Debug)]
@@ -83,11 +95,18 @@ fn main() {
 }
 
 fn output_target_curve() {
+    output_curve(
+        String::from("target_curve"),
+        &vec![8, 25, 4, 45, 10, 17, 35],
+    );
+}
+
+fn output_curve(file_name: String, variables: &Vec<u8>) {
     for i in 1..1000 {
         let x = i as f64 / 10.0;
-        let y = target_curve(x);
+        let y = cal_y(x, variables);
 
-        match output(String::from("target_curve"), x, y) {
+        match output(file_name.clone(), x, y) {
             Ok(_) => println!("Target cruve exported"),
             Err(e) => eprintln!("{}", e),
         }
