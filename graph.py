@@ -35,7 +35,7 @@ def animate(_):
         pass
 
     try:
-        df_dist = pd.read_csv('distance.csv', names=['OldDistance', 'Distance'])
+        df_dist = pd.read_csv('generation_iteration.csv', names=['iteration', 'fitness'])
         current_dist_len = len(df_dist)
         
         if current_dist_len > state["last_dist_row"]:
@@ -45,7 +45,7 @@ def animate(_):
             ax2.set_title('Distance before vs after reproduction')
             
             # Use colormap to color time steps
-            ax2.scatter(df_dist['OldDistance'], df_dist['Distance'], color = "black", cmap='jet', s=10)
+            ax2.scatter(df_dist['iteration'], df_dist['fitness'], color = "blue", cmap='jet', s=10)
             
             state["last_dist_row"] = current_dist_len
     except Exception:

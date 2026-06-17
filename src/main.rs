@@ -26,7 +26,7 @@ struct Individual {
 }
 
 impl Individual {
-    fn new_random() -> Self {
+    fn new_random(i: &usize) -> Self {
         let mut rng = rand::rng();
 
         let genes = vec![
@@ -43,13 +43,46 @@ impl Individual {
             genes,
             fitness: 0.0,
         };
-        ind.calc_fitness();
+
+        ind.calc_fitness(i);
         ind
     }
 
-    fn calc_fitness(&mut self) {}
+    fn calc_fitness(&mut self, i: &usize) {
+        let max_gen = *self
+            .genes
+            .iter()
+            .max_by(|a, b| a.partial_cmp(b).unwrap())
+            .unwrap();
 
-    fn mutate(&mut self, rate: f64) {}
+        println!("{}", max_gen);
+
+        let weight = 255 / max_gen;
+
+        let after_weight_gens: Vec<u8> = self.genes.iter().map(|&g| (g / weight) as u8).collect();
+
+        let x = *i as f64 / 10.0;
+        let y_target = cal_target_y(x);
+        let y = cal_y(x, &after_weight_gens);
+
+        let error = (y_target - y).abs();
+
+        self.fitness = error;
+    }
+
+    fn mutate(&mut self, i: &usize, rate: f64) {
+        // let mut rng = rand::rng();
+        //
+        // for byte in self.genes.iter_mut() {
+        //     for bit_pos in 0..8 {
+        //         if rng.random_bool(rate) {
+        //             *byte ^= (1 << bit_pos) as u8; // Cast literal to u8 explicitly
+        //         }
+        //     }
+        // }
+        //
+        // self.calc_fitness(i);
+    }
 
     fn crossover(&self, other: &Self) -> Self {
         Self {
@@ -61,18 +94,19 @@ impl Individual {
 
 fn main() {
     let pop_size = 100;
-    let generations = 1000;
-    let mutation_rate = 0.1;
+    let mutation_rate = 0.15;
     let mut rng = rand::rng();
 
-    let mut population: Vec<Individual> = (0..pop_size).map(|_| Individual::new_random()).collect();
+    let mut population: Vec<Individual> =
+        (0..pop_size).map(|i| Individual::new_random(&i)).collect();
 
     output_target_curve();
 
-    for fgen in 0..generations {
+    for fgen in 1..pop_size {
         population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
 
-        if fgen % 100 == 0 {
+        if fgen % 20 == 0 {
+            output_generation(fgen, population[0].fitness);
             println!("Gen No. {}: Best genes: {:?}", fgen, population[0].genes);
         }
 
@@ -83,7 +117,7 @@ fn main() {
             let parent2 = tournament_select(&population, &mut rng);
 
             let mut child = parent1.crossover(&parent2);
-            child.mutate(mutation_rate);
+            child.mutate(&fgen, mutation_rate);
             next_gen.push(child);
         }
         population = next_gen;
@@ -107,9 +141,16 @@ fn output_curve(file_name: String, variables: &Vec<u8>) {
         let y = cal_y(x, variables);
 
         match output(file_name.clone(), x, y) {
-            Ok(_) => println!("Target cruve exported"),
+            Ok(_) => (),
             Err(e) => eprintln!("{}", e),
         }
+    }
+}
+
+fn output_generation(gen_i: usize, gen_val: f64) {
+    match output(String::from("generation_iteration"), gen_i as f64, gen_val) {
+        Ok(_) => (),
+        Err(e) => eprintln!("{}", e),
     }
 }
 
