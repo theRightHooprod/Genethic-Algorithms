@@ -23,11 +23,27 @@ def animate(_):
             # Slice new chunk
             new_data = df_points.iloc[state["last_points_row"]:]
             
+            # Plot new segment without clearing old ones
+            ax1.plot(new_data['X'], new_data['Y'], color='red', linestyle=':', alpha=0.7)
+            
+            state["last_points_row"] = current_len
+            state["generation"] += 1
+    except Exception:
+        pass
+    try:
+        df_points = pd.read_csv('result_curve.csv', names=['X', 'Y'])
+        current_len = len(df_points)
+        
+        # Only plot if new data arrived
+        if current_len > state["last_points_row"]:
+            # Slice new chunk
+            new_data = df_points.iloc[state["last_points_row"]:]
+            
             # Unique color for this generation batch
             gen_color = plt.cm.jet((state["generation"] * 15) % 256)
             
             # Plot new segment without clearing old ones
-            ax1.plot(new_data['X'], new_data['Y'], color='red', linestyle=':', alpha=0.7)
+            ax1.plot(new_data['X'], new_data['Y'], color=gen_color, linestyle=':', alpha=0.7)
             
             state["last_points_row"] = current_len
             state["generation"] += 1
