@@ -11,58 +11,34 @@ ax2.set_title('Best individual score across generations')
 ax2.grid(True, alpha=0.3)
 
 # Track how many points processed
-state = {"last_points_row": 0, "last_dist_row": 0, "generation": 0}
+state = {"target_row": 0, "calc_row": 0, "last_dist_row": 0, "generation": 0}
+
+def regenerate_taget_plot():
+        ax1.clear()
+
+        df_target = pd.read_csv("target_curve.csv", names=['X', 'Y'])
+        ax1.plot(df_target['X'], df_target['Y'], color='red', linestyle=':', alpha=0.7)
 
 def animate(_):
     try:
-        df_points = pd.read_csv('target_curve.csv', names=['X', 'Y'])
-        current_len = len(df_points)
+        df_calc = pd.read_csv("result_curve.csv", names=['rX', 'rY'])
+        current_len_calc = len(df_calc)
         
-        # Only plot if new data arrived
-        if current_len > state["last_points_row"]:
-            # Slice new chunk
-            new_data = df_points.iloc[state["last_points_row"]:]
-            
-            # Plot new segment without clearing old ones
-            ax1.plot(new_data['X'], new_data['Y'], color='red', linestyle=':', alpha=0.7)
-            
-            state["last_points_row"] = current_len
-            state["generation"] += 1
-    except Exception:
-        pass
-    try:
-        df_points = pd.read_csv('result_curve.csv', names=['X', 'Y'])
-        current_len = len(df_points)
-        
-        # Only plot if new data arrived
-        if current_len > state["last_points_row"]:
-            # Slice new chunk
-            new_data = df_points.iloc[state["last_points_row"]:]
-            
-            # Unique color for this generation batch
+        if current_len_calc > state["calc_row"]:
+            regenerate_taget_plot()
+            new_data = df_calc.iloc[state["calc_row"]:]
             gen_color = plt.cm.jet((state["generation"] * 15) % 256)
-            
-            # Plot new segment without clearing old ones
-            ax1.plot(new_data['X'], new_data['Y'], color=gen_color, linestyle=':', alpha=0.7)
-            
-            state["last_points_row"] = current_len
-            state["generation"] += 1
+            ax1.plot(new_data['rX'], new_data['rY'], color=gen_color, linestyle='-', alpha=0.7)
+            state["calc_row"] = current_len_calc 
+            state["generation"] += 1;
     except Exception:
         pass
-
     try:
         df_dist = pd.read_csv('generation_iteration.csv', names=['iteration', 'fitness'])
         current_dist_len = len(df_dist)
         
         if current_dist_len > state["last_dist_row"]:
-            # Re-draw full distance metric line sequentially
-            ax2.clear()
-            ax2.grid(True, alpha=0.3)
-            ax2.set_title('Distance before vs after reproduction')
-            
-            # Use colormap to color time steps
-            ax2.scatter(df_dist['iteration'], df_dist['fitness'], color = "blue", cmap='jet', s=10)
-            
+            ax2.plot(df_dist['iteration'], df_dist['fitness'], linestyle='-', color="blue", alpha=0.7)
             state["last_dist_row"] = current_dist_len
     except Exception:
         pass

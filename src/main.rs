@@ -2,6 +2,8 @@ use rand::{Rng, RngExt};
 use std::fs::OpenOptions;
 use std::io::Result;
 use std::io::Write;
+// use std::thread;
+// use std::time::Duration;
 
 fn cal_target_y(x: &f64) -> f64 {
     cal_y(x, &vec![8, 25, 4, 45, 10, 17, 35])
@@ -16,7 +18,7 @@ fn cal_y(x: &f64, variables: &Vec<u8>) -> f64 {
     let f = variables[5] as f64;
     let g = variables[6] as f64;
 
-    a * (b * (x / c).sin() + d * (x / e).cos()) + f * x - g
+    a * (b * (x / c).sin() + d * (x / e).cos()) + f * (x) - g
 }
 
 #[derive(Clone, Debug)]
@@ -71,7 +73,7 @@ impl Individual {
         let mut error: f64 = 0.0;
 
         for i in 1..1000 {
-            let x = i as f64 / 10.0;
+            let x = (i / 10) as f64;
             let y_target = cal_target_y(&x);
             let y = cal_y(&x, &after_weight_gens);
 
@@ -98,7 +100,6 @@ impl Individual {
     fn crossover(&self, other: &Self) -> Self {
         let mut rng = rand::rng();
 
-        // Pick random bit split point between 1 and 55 inclusive
         let cut_bit = rng.random_range(1..=55);
 
         let mut child_genes = vec![0u8; 7];
@@ -136,6 +137,8 @@ impl Individual {
 }
 
 fn main() {
+    let elitism = true;
+    let elitism_size = 200;
     let pop_size = 100;
     let mutation_rate = 0.15;
     let mut rng = rand::rng();
@@ -146,11 +149,11 @@ fn main() {
 
     output_target_curve();
 
-    for i in 0..pop_size {
-        population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+    for _ in 0..pop_size {
+        let poplen = population.len();
 
         for _ in 0..4 {
-            population[rng.random_range(0..100)].mutate(mutation_rate);
+            population[rng.random_range(0..poplen)].mutate(mutation_rate);
         }
 
         let parent1 = tournament_select(&population, &mut rng);
@@ -158,24 +161,40 @@ fn main() {
 
         let child = parent1.crossover(&parent2);
 
-        output_curve(String::from("result_curve"), &child.genes);
-        output_generation(&i, &child.fitness);
+        // child.mutate(mutation_rate);
 
-        children_pupulation.push(child);
+        if elitism {
+            population.push(child)
+        } else {
+            children_pupulation.push(child)
+        };
     }
 
-    population.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
-    children_pupulation.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+    let mut pop = if elitism {
+        population
+    } else {
+        children_pupulation
+    };
+
+    pop.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+
+    let best_children = &pop.last().unwrap();
+
+    output_curve(String::from("result_curve"), &best_children.genes);
+
+    for i in (0..if elitism { elitism_size } else { pop_size }).rev() {
+        output_generation(&(i as f64), &pop[i].fitness);
+    }
+
+    println!("total children. {}", pop.len());
 
     println!("Target: [8, 25, 4, 45, 10, 17, 35]");
     println!(
-        "Final best: {:?} fitness: {}",
-        population[0].genes, population[0].fitness
+        "Final best child: {:?} fitness: {}",
+        best_children.genes, best_children.fitness
     );
-    println!(
-        "Final best children: {:?} fitness: {}",
-        children_pupulation[0].genes, children_pupulation[0].fitness
-    );
+
+    // thread::sleep(Duration::from_millis(100))
 }
 
 fn output_target_curve() {
@@ -187,7 +206,7 @@ fn output_target_curve() {
 
 fn output_curve(file_name: String, variables: &Vec<u8>) {
     for i in 1..1000 {
-        let x = i as f64 / 10.0;
+        let x = (i / 10) as f64;
         let y = cal_y(&x, variables);
 
         match output(file_name.clone(), &x, &y) {
@@ -197,12 +216,8 @@ fn output_curve(file_name: String, variables: &Vec<u8>) {
     }
 }
 
-fn output_generation(gen_i: &usize, gen_val: &f64) {
-    match output(
-        String::from("generation_iteration"),
-        &(*gen_i as f64),
-        gen_val,
-    ) {
+fn output_generation(gen_i: &f64, gen_val: &f64) {
+    match output(String::from("generation_iteration"), gen_i, gen_val) {
         Ok(_) => (),
         Err(e) => eprintln!("{}", e),
     }
@@ -211,7 +226,7 @@ fn output_generation(gen_i: &usize, gen_val: &f64) {
 fn tournament_select(pop: &[Individual], rng: &mut impl Rng) -> Individual {
     let mut best = &pop[rng.random_range(0..pop.len())];
 
-    for _ in 0..4 {
+    for _ in 0..3 {
         let contender = &pop[rng.random_range(0..pop.len())];
         if contender.fitness < best.fitness {
             best = contender;
