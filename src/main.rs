@@ -67,7 +67,7 @@ impl Individual {
             .genes
             .iter()
             .map(|&g| {
-                let value = g * safe_factor;
+                let value = g / safe_factor;
 
                 if value == 0 {
                     return 1;
@@ -149,6 +149,10 @@ fn main() {
     let mut rng = rand::rng();
 
     let mut population: Vec<Individual> = (0..pop_size).map(|_| Individual::new_random()).collect();
+
+    let mut poblation_father = Vec::with_capacity(pop_size / 2);
+    let mut poblation_mothers = Vec::with_capacity(pop_size / 2);
+
     let mut next_generation = Vec::with_capacity(pop_size);
 
     for _ in 0..(mutation_rate * 10.0) as usize {
@@ -164,29 +168,50 @@ fn main() {
         next_generation.push(population[0].clone());
     }
 
-    for i in 0..pop_size {
+    for _ in 0..pop_size / 2 {
         let parent1 = tournament_select(&population, &mut rng);
         let parent2 = tournament_select(&population, &mut rng);
 
-        if i < 50 {
-            let (child1, child2) = parent1.crossover(&parent2);
+        poblation_father.push(parent1);
+        poblation_mothers.push(parent2);
+    }
 
-            // child1.mutate(mutation_rate);
-            // child2.mutate(mutation_rate);
+    for _ in 0..(mutation_rate * 10.0) as usize {
+        let target_idx = rng.random_range(0..poblation_mothers.len() / 2);
+        poblation_father[target_idx].mutate(mutation_rate);
+    }
+    for _ in 0..(mutation_rate * 10.0) as usize {
+        let target_idx = rng.random_range(0..poblation_father.len() / 2);
+        poblation_mothers[target_idx].mutate(mutation_rate);
+    }
+
+    for i in 0..pop_size {
+        if i % 2 == 0 {
+            let parent1 = tournament_select(&poblation_father, &mut rng);
+            let parent2 = tournament_select(&poblation_mothers, &mut rng);
+
+            let (child1, child2) = parent1.crossover(&parent2);
 
             next_generation.push(child1);
             next_generation.push(child2);
         }
+    }
 
-        next_generation.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
+    for _ in 0..(mutation_rate * 10.0) as usize {
+        let target_idx = rng.random_range(0..next_generation.len() / 2);
+        next_generation[target_idx].mutate(mutation_rate);
+    }
 
-        output_curve("result_curve", &next_generation[0].genes);
-        output_generation(i as f64, next_generation[0].fitness);
+    next_generation.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
+
+    for i in 0..next_generation.len() {
+        output_curve("result_curve", &next_generation[i].genes);
+        output_generation(i as f64, next_generation[i].fitness);
 
         thread::sleep(Duration::from_millis(50));
     }
 
-    let best_child = &next_generation[0];
+    let best_child = &next_generation.last().unwrap();
 
     println!("Total population size: {}", next_generation.len());
     println!("Target: [8, 25, 4, 45, 10, 17, 35]");
