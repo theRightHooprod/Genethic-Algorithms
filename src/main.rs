@@ -1,15 +1,18 @@
 use rand::{Rng, RngExt};
 use std::fs::OpenOptions;
-use std::io::Result;
-use std::io::Write;
-// use std::thread;
-// use std::time::Duration;
+use std::io::{self, BufWriter, Write};
+use std::thread;
+use std::time::Duration;
 
 fn cal_target_y(x: &f64) -> f64 {
     cal_y(x, &vec![8, 25, 4, 45, 10, 17, 35])
 }
 
 fn cal_y(x: &f64, variables: &Vec<u8>) -> f64 {
+    if variables.len() < 7 {
+        return 0.0;
+    }
+
     let a = variables[0] as f64;
     let b = variables[1] as f64;
     let c = variables[2] as f64;
@@ -18,7 +21,10 @@ fn cal_y(x: &f64, variables: &Vec<u8>) -> f64 {
     let f = variables[5] as f64;
     let g = variables[6] as f64;
 
-    a * (b * (x / c).sin() + d * (x / e).cos()) + f * (x) - g
+    let c = if c == 0.0 { 1.0 } else { c };
+    let e = if e == 0.0 { 1.0 } else { e };
+
+    a * (b * (x / c).sin() + d * (x / e).cos()) + f * (*x) - g
 }
 
 #[derive(Clone, Debug)]
@@ -32,13 +38,13 @@ impl Individual {
         let mut rng = rand::rng();
 
         let genes = vec![
-            rng.random_range(1..255),
-            rng.random_range(1..255),
-            rng.random_range(1..255),
-            rng.random_range(1..255),
-            rng.random_range(1..255),
-            rng.random_range(1..255),
-            rng.random_range(1..255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
+            rng.random_range(1..=255),
         ];
 
         let mut ind = Individual {
@@ -54,13 +60,14 @@ impl Individual {
         let max_gen = *self.genes.iter().max().unwrap_or(&1);
 
         let factor = if max_gen > 0 { 255 / max_gen } else { 1 };
+
         let safe_factor = if factor == 0 { 1 } else { factor };
 
         let after_weight_gens: Vec<u8> = self
             .genes
             .iter()
             .map(|&g| {
-                let value = g / safe_factor;
+                let value = g * safe_factor;
 
                 if value == 0 {
                     return 1;
@@ -73,7 +80,7 @@ impl Individual {
         let mut error: f64 = 0.0;
 
         for i in 1..1000 {
-            let x = (i / 10) as f64;
+            let x = (i as f64) / 10.0;
             let y_target = cal_target_y(&x);
             let y = cal_y(&x, &after_weight_gens);
 
@@ -97,137 +104,104 @@ impl Individual {
         self.calc_fitness();
     }
 
-    fn crossover(&self, other: &Self) -> Self {
+    fn crossover(&self, other: &Self) -> (Self, Self) {
         let mut rng = rand::rng();
+        let cut_point = rng.random_range(0..=55);
 
-        let cut_bit = rng.random_range(1..=55);
+        let mut p1_buf = [0u8; 8];
+        let mut p2_buf = [0u8; 8];
 
-        let mut child_genes = vec![0u8; 7];
+        p1_buf[..7].copy_from_slice(&self.genes[..7]);
+        p2_buf[..7].copy_from_slice(&other.genes[..7]);
 
-        for i in 0..7 {
-            let mut child_byte = 0u8;
-            for bit_pos in 0..8 {
-                let global_bit_idx = (i * 8) + bit_pos;
+        let p1 = u64::from_le_bytes(p1_buf);
+        let p2 = u64::from_le_bytes(p2_buf);
 
-                // Determine which parent owns this specific bit
-                let parent = if global_bit_idx < cut_bit {
-                    self
-                } else {
-                    other
-                };
+        let mask = (1u64 << cut_point) - 1;
 
-                // Extract bit from parent byte
-                let bit_val = (parent.genes[i] >> bit_pos) & 1;
+        let c1 = (p1 & mask) | (p2 & !mask);
+        let c2 = (p2 & mask) | (p1 & !mask);
 
-                // Write bit into child byte
-                child_byte |= bit_val << bit_pos;
-            }
-            child_genes[i] = child_byte;
-        }
+        let c1_genes = c1.to_le_bytes()[..7].to_vec();
+        let c2_genes = c2.to_le_bytes()[..7].to_vec();
 
-        let mut ind = Individual {
-            genes: child_genes,
+        let mut child = Individual {
+            genes: c1_genes,
             fitness: 0.0,
         };
 
-        ind.calc_fitness();
+        let mut child2 = Individual {
+            genes: c2_genes,
+            fitness: 0.0,
+        };
 
-        ind
+        child.calc_fitness();
+        child2.calc_fitness();
+
+        (child, child2)
     }
 }
 
 fn main() {
-    let elitism = true;
-    let elitism_size = 200;
+    let elitism = false;
     let pop_size = 100;
     let mutation_rate = 0.15;
     let mut rng = rand::rng();
 
     let mut population: Vec<Individual> = (0..pop_size).map(|_| Individual::new_random()).collect();
+    let mut next_generation = Vec::with_capacity(pop_size);
 
-    let mut children_pupulation: Vec<Individual> = Vec::new();
+    for _ in 0..(mutation_rate * 10.0) as usize {
+        let target_idx = rng.random_range(0..pop_size);
+        population[target_idx].mutate(mutation_rate);
+    }
 
     output_target_curve();
 
-    for _ in 0..pop_size {
-        let poplen = population.len();
+    if elitism {
+        // Lower fitness error goes first
+        population.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
+        next_generation.push(population[0].clone());
+    }
 
-        for _ in 0..4 {
-            population[rng.random_range(0..poplen)].mutate(mutation_rate);
-        }
-
+    for i in 0..pop_size {
         let parent1 = tournament_select(&population, &mut rng);
         let parent2 = tournament_select(&population, &mut rng);
 
-        let child = parent1.crossover(&parent2);
+        if i < 50 {
+            let (child1, child2) = parent1.crossover(&parent2);
 
-        // child.mutate(mutation_rate);
+            // child1.mutate(mutation_rate);
+            // child2.mutate(mutation_rate);
 
-        if elitism {
-            population.push(child)
-        } else {
-            children_pupulation.push(child)
-        };
+            next_generation.push(child1);
+            next_generation.push(child2);
+        }
+
+        next_generation.sort_by(|a, b| a.fitness.partial_cmp(&b.fitness).unwrap());
+
+        output_curve("result_curve", &next_generation[0].genes);
+        output_generation(i as f64, next_generation[0].fitness);
+
+        thread::sleep(Duration::from_millis(50));
     }
 
-    let mut pop = if elitism {
-        population
-    } else {
-        children_pupulation
-    };
+    let best_child = &next_generation[0];
 
-    pop.sort_by(|a, b| b.fitness.partial_cmp(&a.fitness).unwrap());
-
-    let best_children = &pop.last().unwrap();
-
-    output_curve(String::from("result_curve"), &best_children.genes);
-
-    for i in (0..if elitism { elitism_size } else { pop_size }).rev() {
-        output_generation(&(i as f64), &pop[i].fitness);
-    }
-
-    println!("total children. {}", pop.len());
-
+    println!("Total population size: {}", next_generation.len());
     println!("Target: [8, 25, 4, 45, 10, 17, 35]");
     println!(
-        "Final best child: {:?} fitness: {}",
-        best_children.genes, best_children.fitness
+        "Final best child: {:?} fitness (error): {}",
+        best_child.genes, best_child.fitness
     );
-
-    // thread::sleep(Duration::from_millis(100))
-}
-
-fn output_target_curve() {
-    output_curve(
-        String::from("target_curve"),
-        &vec![8, 25, 4, 45, 10, 17, 35],
-    );
-}
-
-fn output_curve(file_name: String, variables: &Vec<u8>) {
-    for i in 1..1000 {
-        let x = (i / 10) as f64;
-        let y = cal_y(&x, variables);
-
-        match output(file_name.clone(), &x, &y) {
-            Ok(_) => (),
-            Err(e) => eprintln!("{}", e),
-        }
-    }
-}
-
-fn output_generation(gen_i: &f64, gen_val: &f64) {
-    match output(String::from("generation_iteration"), gen_i, gen_val) {
-        Ok(_) => (),
-        Err(e) => eprintln!("{}", e),
-    }
 }
 
 fn tournament_select(pop: &[Individual], rng: &mut impl Rng) -> Individual {
     let mut best = &pop[rng.random_range(0..pop.len())];
 
-    for _ in 0..3 {
+    for _ in 0..=3 {
         let contender = &pop[rng.random_range(0..pop.len())];
+        // Lower error is better
         if contender.fitness < best.fitness {
             best = contender;
         }
@@ -236,13 +210,55 @@ fn tournament_select(pop: &[Individual], rng: &mut impl Rng) -> Individual {
     best.clone()
 }
 
-fn output(file_name: String, x: &f64, y: &f64) -> Result<()> {
-    let mut target_curve = OpenOptions::new()
+fn output_target_curve() {
+    output_curve("target_curve", &vec![8, 25, 4, 45, 10, 17, 35]);
+}
+
+fn output_curve(file_name: &str, variables: &Vec<u8>) {
+    let file_path = format!("{}.csv", file_name);
+    let file = match OpenOptions::new()
         .create(true)
         .append(true)
-        .open(&(file_name + ".csv"))?;
+        .open(&file_path)
+    {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Failed to open {}: {}", file_path, e);
+            return;
+        }
+    };
 
-    writeln!(target_curve, "{},{}", x, y)?;
+    let mut writer = BufWriter::new(file);
 
-    Ok(())
+    for i in 1..1000 {
+        let x = (i as f64) / 10.0;
+        let y = cal_y(&x, variables);
+
+        if let Err(e) = writer_output(&mut writer, x, y) {
+            eprintln!("Write error: {}", e);
+        }
+    }
+
+    if let Err(e) = writer.flush() {
+        eprintln!("Flush error: {}", e);
+    }
+}
+
+fn writer_output<W: Write>(writer: &mut W, x: f64, y: f64) -> io::Result<()> {
+    writeln!(writer, "{},{}", x, y)
+}
+
+fn output_generation(gen_i: f64, gen_val: f64) {
+    let file_path = "generation_iteration.csv";
+    let file = match OpenOptions::new().create(true).append(true).open(file_path) {
+        Ok(f) => f,
+        Err(e) => {
+            eprintln!("Failed to open {}: {}", file_path, e);
+            return;
+        }
+    };
+    let mut writer = BufWriter::new(file);
+    if let Err(e) = writer_output(&mut writer, gen_i, gen_val) {
+        eprintln!("Write error: {}", e);
+    }
 }

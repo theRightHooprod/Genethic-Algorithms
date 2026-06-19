@@ -36,9 +36,10 @@ def animate(_):
     try:
         df_dist = pd.read_csv('generation_iteration.csv', names=['iteration', 'fitness'])
         current_dist_len = len(df_dist)
-        
+
         if current_dist_len > state["last_dist_row"]:
-            ax2.plot(df_dist['iteration'], df_dist['fitness'], linestyle='-', color="blue", alpha=0.7)
+            ax2.clear()
+            ax2.plot(df_dist['iteration'], df_dist['fitness'], marker="o", linestyle='-', color="blue", alpha=0.7)
             state["last_dist_row"] = current_dist_len
     except Exception:
         pass
